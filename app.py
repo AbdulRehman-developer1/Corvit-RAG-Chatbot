@@ -457,14 +457,27 @@ def mentions_volatile_info(question: str) -> bool:
 
 def display_sources(retrieved: list[RetrievedChunk]) -> None:
     """Render the '🔎 View Retrieved Context' expander with chunk details."""
-    with st.expander("🔎 View Retrieved Context"):
+    with st.expander("🔎  View Retrieved Context"):
         if not retrieved:
             st.caption("No chunks were retrieved for this answer.")
             return
         for i, r in enumerate(retrieved, start=1):
-            st.markdown(f"**Chunk {i}**  \n"
-                        f"Similarity Score: `{r.score:.2f}`  \n"
-                        f"Source: `{r.chunk.source}` — Page {r.chunk.page}")
+            pct = max(0.0, min(1.0, r.score))
+            st.markdown(
+                f"""
+                <div class="chunk-card">
+                    <div class="chunk-card-head">
+                        <span class="chunk-badge">Chunk {i}</span>
+                        <span class="chunk-meta">{r.chunk.source} · Page {r.chunk.page}</span>
+                    </div>
+                    <div class="score-track">
+                        <div class="score-fill" style="width:{pct*100:.0f}%;"></div>
+                    </div>
+                    <div class="score-label">Similarity {r.score:.2f}</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
             st.write(r.chunk.text)
             st.divider()
 
@@ -478,8 +491,8 @@ def render_sources_line(retrieved: list[RetrievedChunk]) -> str:
         label = f"{r.chunk.source} — Page {r.chunk.page}"
         if label not in seen:
             seen.append(label)
-    lines = "\n".join(f"- {s}" for s in seen[:5])
-    return f"📚 **Sources:**\n{lines}"
+    chips = " ".join(f'<span class="source-chip">📄 {s}</span>' for s in seen[:5])
+    return f'<div class="sources-line">{chips}</div>'
 
 
 # ==============================================================================
@@ -494,23 +507,356 @@ st.set_page_config(
 )
 
 st.markdown("""
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
 <style>
-.main .block-container { padding-top: 2rem; max-width: 900px; }
-.corvit-hero {
-    background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 60%, #2563eb 100%);
-    padding: 1.8rem 2rem;
-    border-radius: 16px;
-    color: white;
-    margin-bottom: 1.4rem;
+
+/* ============================================================
+   GLOBAL RESET / TYPOGRAPHY
+   ============================================================ */
+html, body, [class*="css"] {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
 }
-.corvit-hero h1 { margin: 0; font-size: 1.9rem; }
-.corvit-hero p { margin: 0.3rem 0 0 0; opacity: 0.9; font-size: 0.98rem; }
-.stChatMessage { border-radius: 12px; }
-div[data-testid="stExpander"] {
-    border: 1px solid rgba(120,120,120,0.25);
+
+:root {
+    --corvit-navy: #0b1120;
+    --corvit-deep: #111d3b;
+    --corvit-blue: #2563eb;
+    --corvit-cyan: #06b6d4;
+    --corvit-violet: #7c3aed;
+    --corvit-glow: rgba(37, 99, 235, 0.35);
+    --corvit-glass: rgba(255, 255, 255, 0.06);
+    --corvit-border: rgba(148, 163, 184, 0.18);
+}
+
+.stApp {
+    background:
+        radial-gradient(circle at 15% 0%, rgba(37,99,235,0.16), transparent 45%),
+        radial-gradient(circle at 85% 15%, rgba(124,58,237,0.14), transparent 40%),
+        radial-gradient(circle at 50% 100%, rgba(6,182,212,0.10), transparent 45%);
+}
+
+.main .block-container {
+    padding-top: 1.6rem;
+    max-width: 920px;
+    animation: pageFadeIn 0.6s ease-out;
+}
+
+@keyframes pageFadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, var(--corvit-blue), var(--corvit-violet));
     border-radius: 10px;
 }
-.sample-q-caption { color: #6b7280; font-size: 0.85rem; margin-top: -0.4rem; }
+::-webkit-scrollbar-thumb:hover { background: var(--corvit-cyan); }
+
+/* ============================================================
+   HERO HEADER
+   ============================================================ */
+.corvit-hero {
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(120deg, #0b1120 0%, #101c3f 35%, #1d3fae 75%, #2563eb 100%);
+    background-size: 220% 220%;
+    animation: heroGradient 12s ease infinite;
+    padding: 2.1rem 2.2rem;
+    border-radius: 20px;
+    color: white;
+    margin-bottom: 1.6rem;
+    box-shadow: 0 12px 40px -12px var(--corvit-glow), 0 0 0 1px var(--corvit-border);
+}
+
+@keyframes heroGradient {
+    0%   { background-position: 0% 50%; }
+    50%  { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+.corvit-hero::before {
+    content: "";
+    position: absolute;
+    top: -60%; left: -20%;
+    width: 60%; height: 220%;
+    background: linear-gradient(120deg, transparent, rgba(255,255,255,0.10), transparent);
+    transform: rotate(18deg);
+    animation: heroSheen 6s ease-in-out infinite;
+}
+
+@keyframes heroSheen {
+    0%   { transform: translateX(-120%) rotate(18deg); }
+    55%  { transform: translateX(220%) rotate(18deg); }
+    100% { transform: translateX(220%) rotate(18deg); }
+}
+
+.corvit-hero-inner { position: relative; z-index: 1; display: flex; align-items: center; gap: 1rem; }
+
+.corvit-hero-icon {
+    font-size: 2.1rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 58px; height: 58px;
+    border-radius: 16px;
+    background: rgba(255,255,255,0.10);
+    border: 1px solid rgba(255,255,255,0.18);
+    animation: iconFloat 3.5s ease-in-out infinite;
+    backdrop-filter: blur(6px);
+}
+
+@keyframes iconFloat {
+    0%, 100% { transform: translateY(0) rotate(0deg); }
+    50% { transform: translateY(-6px) rotate(-4deg); }
+}
+
+.corvit-hero h1 {
+    margin: 0;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 2rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    background: linear-gradient(90deg, #ffffff, #cfe0ff 60%, #a5f3fc);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.corvit-hero p { margin: 0.3rem 0 0 0; opacity: 0.92; font-size: 0.98rem; }
+.corvit-hero .corvit-sub { font-size: 0.85rem; opacity: 0.72; margin-top: 0.35rem; }
+
+.corvit-pill-row { display: flex; gap: 0.5rem; margin-top: 1rem; flex-wrap: wrap; position: relative; z-index: 1; }
+.corvit-pill {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    padding: 0.32rem 0.75rem;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.10);
+    border: 1px solid rgba(255,255,255,0.18);
+    color: #e2e8f0;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    backdrop-filter: blur(6px);
+    transition: all 0.25s ease;
+}
+.corvit-pill:hover {
+    background: rgba(255,255,255,0.18);
+    transform: translateY(-2px);
+}
+.pulse-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: #34d399;
+    box-shadow: 0 0 0 rgba(52, 211, 153, 0.6);
+    animation: pulseDot 1.8s infinite;
+}
+@keyframes pulseDot {
+    0%   { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.6); }
+    70%  { box-shadow: 0 0 0 8px rgba(52, 211, 153, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0); }
+}
+
+/* ============================================================
+   CHAT MESSAGES
+   ============================================================ */
+.stChatMessage {
+    border-radius: 16px !important;
+    border: 1px solid var(--corvit-border);
+    background: var(--corvit-glass);
+    backdrop-filter: blur(10px);
+    animation: msgIn 0.35s ease-out;
+    transition: box-shadow 0.25s ease, transform 0.25s ease;
+    margin-bottom: 0.35rem;
+}
+.stChatMessage:hover {
+    box-shadow: 0 6px 24px -8px rgba(37, 99, 235, 0.25);
+}
+
+@keyframes msgIn {
+    from { opacity: 0; transform: translateY(10px) scale(0.99); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Sources chips under an answer */
+.sources-line {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.6rem;
+}
+.source-chip {
+    font-size: 0.74rem;
+    font-weight: 500;
+    padding: 0.28rem 0.6rem;
+    border-radius: 999px;
+    background: linear-gradient(135deg, rgba(37,99,235,0.14), rgba(124,58,237,0.14));
+    border: 1px solid rgba(37,99,235,0.28);
+    color: #93c5fd;
+    transition: transform 0.2s ease, background 0.2s ease;
+}
+.source-chip:hover {
+    transform: translateY(-1px);
+    background: linear-gradient(135deg, rgba(37,99,235,0.26), rgba(124,58,237,0.26));
+}
+
+/* ============================================================
+   RETRIEVED-CONTEXT EXPANDER + CHUNK CARDS
+   ============================================================ */
+div[data-testid="stExpander"] {
+    border: 1px solid var(--corvit-border) !important;
+    border-radius: 14px !important;
+    background: var(--corvit-glass);
+    overflow: hidden;
+    transition: border-color 0.25s ease;
+}
+div[data-testid="stExpander"]:hover {
+    border-color: rgba(37, 99, 235, 0.45) !important;
+}
+
+.chunk-card {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--corvit-border);
+    border-radius: 12px;
+    padding: 0.7rem 0.9rem;
+    margin-bottom: 0.4rem;
+    transition: transform 0.2s ease, border-color 0.2s ease;
+}
+.chunk-card:hover {
+    transform: translateX(2px);
+    border-color: rgba(37, 99, 235, 0.4);
+}
+.chunk-card-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; flex-wrap: wrap; gap: 0.3rem; }
+.chunk-badge {
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 0.2rem 0.55rem;
+    border-radius: 8px;
+    background: linear-gradient(135deg, var(--corvit-blue), var(--corvit-violet));
+    color: white;
+    letter-spacing: 0.02em;
+}
+.chunk-meta { font-size: 0.75rem; color: #94a3b8; }
+.score-track {
+    width: 100%;
+    height: 6px;
+    border-radius: 999px;
+    background: rgba(148,163,184,0.18);
+    overflow: hidden;
+}
+.score-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--corvit-cyan), var(--corvit-blue));
+    transition: width 0.6s ease;
+}
+.score-label { font-size: 0.7rem; color: #64748b; margin-top: 0.25rem; }
+
+/* ============================================================
+   SIDEBAR
+   ============================================================ */
+section[data-testid="stSidebar"] {
+    background: linear-gradient(180deg, #0b1120 0%, #0f1830 100%);
+    border-right: 1px solid var(--corvit-border);
+}
+section[data-testid="stSidebar"] * { color: #e2e8f0; }
+
+.sidebar-card {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--corvit-border);
+    border-radius: 12px;
+    padding: 0.7rem 0.85rem;
+    margin-bottom: 0.6rem;
+    transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+.sidebar-card:hover {
+    transform: translateY(-1px);
+    border-color: rgba(37, 99, 235, 0.45);
+    background: rgba(37, 99, 235, 0.08);
+}
+.sidebar-card .label {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #64748b;
+    margin-bottom: 0.15rem;
+}
+.sidebar-card .value {
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: #f1f5f9;
+}
+
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.82rem;
+    font-weight: 600;
+    padding: 0.45rem 0.7rem;
+    border-radius: 10px;
+    width: 100%;
+}
+.status-ready {
+    background: rgba(52, 211, 153, 0.12);
+    border: 1px solid rgba(52, 211, 153, 0.35);
+    color: #6ee7b7;
+}
+.status-error {
+    background: rgba(248, 113, 113, 0.12);
+    border: 1px solid rgba(248, 113, 113, 0.35);
+    color: #fca5a5;
+}
+
+/* Sidebar / general buttons */
+.stButton > button {
+    border-radius: 10px !important;
+    border: 1px solid var(--corvit-border) !important;
+    background: rgba(255,255,255,0.04) !important;
+    color: #e2e8f0 !important;
+    font-weight: 500 !important;
+    transition: all 0.2s ease !important;
+}
+.stButton > button:hover {
+    border-color: var(--corvit-blue) !important;
+    background: linear-gradient(135deg, rgba(37,99,235,0.18), rgba(124,58,237,0.18)) !important;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px -6px var(--corvit-glow);
+}
+.stButton > button:active { transform: translateY(0px) scale(0.98); }
+
+/* Sample question buttons: left-aligned text look */
+section[data-testid="stSidebar"] .stButton > button {
+    text-align: left;
+    justify-content: flex-start;
+    font-size: 0.82rem;
+}
+
+.sample-q-caption { color: #64748b; font-size: 0.85rem; margin-top: -0.4rem; }
+
+/* ============================================================
+   CHAT INPUT
+   ============================================================ */
+div[data-testid="stChatInput"] textarea,
+div[data-testid="stChatInput"] {
+    border-radius: 14px !important;
+}
+div[data-testid="stChatInput"]:focus-within {
+    box-shadow: 0 0 0 2px var(--corvit-blue) !important;
+}
+
+/* ============================================================
+   MISC
+   ============================================================ */
+hr, .stDivider { opacity: 0.25; }
+
+.stSpinner > div { border-top-color: var(--corvit-blue) !important; }
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -523,11 +869,22 @@ def main():
     # ---- Hero header --------------------------------------------------------
     st.markdown("""
     <div class="corvit-hero">
-        <h1>🧠 Corvit AI</h1>
-        <p>FAISS Powered RAG Knowledge Assistant</p>
-        <p style="font-size:0.85rem; opacity:0.8;">
-            Ask questions about Corvit Systems, courses, campuses, fees, timings and training programs.
-        </p>
+        <div class="corvit-hero-inner">
+            <div class="corvit-hero-icon">🧠</div>
+            <div>
+                <h1>Corvit AI</h1>
+                <p>FAISS Powered RAG Knowledge Assistant</p>
+                <p class="corvit-sub">
+                    Ask questions about Corvit Systems, courses, campuses, fees, timings and training programs.
+                </p>
+            </div>
+        </div>
+        <div class="corvit-pill-row">
+            <span class="corvit-pill"><span class="pulse-dot"></span> Live retrieval</span>
+            <span class="corvit-pill">⚡ FAISS vector search</span>
+            <span class="corvit-pill">🤖 Groq LLM</span>
+            <span class="corvit-pill">📄 Grounded in Corvit KB</span>
+        </div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -573,28 +930,30 @@ def main():
 
     # ---- Sidebar ---------------------------------------------------------
     with st.sidebar:
-        st.subheader("📚 Knowledge Base")
-        st.write("Corvit Knowledge PDF")
+        st.markdown("### ⚙️ System Overview")
 
-        st.subheader("🧠 Embedding Model")
-        st.write("all-MiniLM-L6-v2")
+        st.markdown(
+            f"""
+            <div class="sidebar-card"><div class="label">📚 Knowledge Base</div><div class="value">Corvit Knowledge PDF</div></div>
+            <div class="sidebar-card"><div class="label">🧠 Embedding Model</div><div class="value">all-MiniLM-L6-v2</div></div>
+            <div class="sidebar-card"><div class="label">⚡ Vector Store</div><div class="value">FAISS (cosine / IP)</div></div>
+            <div class="sidebar-card"><div class="label">🤖 LLM</div><div class="value">Groq · {MODEL_NAME}</div></div>
+            <div class="sidebar-card"><div class="label">🔢 Top-K Retrieval</div><div class="value">{TOP_K} chunks</div></div>
+            """,
+            unsafe_allow_html=True,
+        )
 
-        st.subheader("⚡ Vector Store")
-        st.write("FAISS")
-
-        st.subheader("🤖 LLM")
-        st.write(f"Groq ({MODEL_NAME})")
-
-        st.subheader("🔢 Top-K")
-        st.write(TOP_K)
-
-        st.divider()
         if chunks is not None:
-            st.caption(f"Indexed chunks: {len(chunks)}")
+            st.markdown(
+                f'<div class="sidebar-card"><div class="label">🧩 Indexed Chunks</div>'
+                f'<div class="value">{len(chunks)}</div></div>',
+                unsafe_allow_html=True,
+            )
+
         if setup_error:
-            st.error("System not fully ready — see main panel for details.")
+            st.markdown('<div class="status-badge status-error">⚠️ System not fully ready</div>', unsafe_allow_html=True)
         else:
-            st.success("System ready ✅")
+            st.markdown('<div class="status-badge status-ready"><span class="pulse-dot"></span> System ready</div>', unsafe_allow_html=True)
 
         st.divider()
         if st.button("🗑️ Clear Chat", use_container_width=True):
@@ -602,7 +961,8 @@ def main():
             st.rerun()
 
         st.divider()
-        st.subheader("💡 Sample Questions")
+        st.markdown("### 💡 Sample Questions")
+        st.markdown('<p class="sample-q-caption">Tap any question to ask instantly</p>', unsafe_allow_html=True)
         for q in SAMPLE_QUESTIONS:
             if st.button(q, key=f"sample_{q}", use_container_width=True):
                 st.session_state.pending_question = q
@@ -621,12 +981,13 @@ def main():
 
     # ---- Render existing chat history --------------------------------------
     for msg in st.session_state.messages:
-        with st.chat_message(msg["role"]):
+        avatar = "🧑‍💻" if msg["role"] == "user" else "🧠"
+        with st.chat_message(msg["role"], avatar=avatar):
             st.markdown(msg["content"])
             if msg["role"] == "assistant" and msg.get("retrieved"):
                 sources_line = render_sources_line(msg["retrieved"])
                 if sources_line:
-                    st.markdown(sources_line)
+                    st.markdown(sources_line, unsafe_allow_html=True)
                 display_sources(msg["retrieved"])
 
     # ---- Handle a sample-question click OR normal chat input ---------------
@@ -644,19 +1005,19 @@ def main():
             return
 
         st.session_state.messages.append({"role": "user", "content": user_question})
-        with st.chat_message("user"):
+        with st.chat_message("user", avatar="🧑‍💻"):
             st.markdown(user_question)
 
-        with st.chat_message("assistant"):
+        with st.chat_message("assistant", avatar="🧠"):
             retrieved: list[RetrievedChunk] = []
             try:
-                with st.spinner("Searching the knowledge base..."):
+                with st.spinner("🔍 Searching the knowledge base..."):
                     retrieved = search_faiss(
                         user_question, embedding_model, faiss_index, chunks, top_k=TOP_K
                     )
                     context = build_rag_context(retrieved)
 
-                with st.spinner("Generating answer..."):
+                with st.spinner("✨ Generating answer..."):
                     history_for_llm = st.session_state.messages[:-1]
                     answer = generate_answer(groq_client, context, user_question, history_for_llm)
 
@@ -676,7 +1037,7 @@ def main():
             st.markdown(answer)
             sources_line = render_sources_line(retrieved)
             if sources_line and NOT_FOUND_MESSAGE not in answer:
-                st.markdown(sources_line)
+                st.markdown(sources_line, unsafe_allow_html=True)
             display_sources(retrieved)
 
         st.session_state.messages.append(
