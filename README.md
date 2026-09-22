@@ -2,8 +2,6 @@
 
 A production-style **Retrieval-Augmented Generation (RAG)** chatbot that answers questions about **Corvit Systems** — grounded strictly in a local knowledge-base PDF. Built with **FAISS**, **Sentence Transformers**, **Groq LLM**, and **Streamlit**.
 
-Repo: [AbdulRehman-developer1/Corvit-AI-Knowledge-Assistant](https://github.com/AbdulRehman-developer1/Corvit-AI-Knowledge-Assistant)
-
 ---
 
 ## 📌 What This Is
